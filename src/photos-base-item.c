@@ -46,6 +46,7 @@
 #include "photos-debug.h"
 #include "photos-delete-item-job.h"
 #include "photos-filterable.h"
+#include "photos-google-item.h"
 #include "photos-icons.h"
 #include "photos-local-item.h"
 #include "photos-pipeline.h"
@@ -2288,6 +2289,18 @@ static void
 photos_base_item_filterable_iface_init (PhotosFilterableInterface *iface)
 {
   iface->get_id = photos_base_item_get_id;
+}
+
+
+gboolean
+photos_base_item_can_share (PhotosBaseItem *self)
+{
+  g_return_val_if_fail (PHOTOS_IS_BASE_ITEM (self), FALSE);
+
+  if (PHOTOS_IS_GOOGLE_ITEM (self))
+    return FALSE;
+  else
+    return TRUE;
 }
 
 

@@ -386,6 +386,10 @@ photos_application_actions_update (PhotosApplication *self)
         can_open = TRUE;
     }
 
+  enable = (((load_state == PHOTOS_LOAD_STATE_FINISHED && mode == PHOTOS_WINDOW_MODE_PREVIEW)
+            || (selection_mode && item != NULL)) && photos_base_item_can_share (item));
+  g_simple_action_set_enabled (self->share_action, enable);
+
   enable = ((load_state == PHOTOS_LOAD_STATE_FINISHED
              && mode == PHOTOS_WINDOW_MODE_PREVIEW
              && photos_base_item_can_trash (item))
