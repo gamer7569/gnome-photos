@@ -26,16 +26,23 @@
 #include <glib/gi18n.h>
 
 #include "photos-base-item.h"
+#include "photos-filterable.h"
+#include "photos-query.h"
+#include "photos-query-builder.h"
+#include "photos-search-context.h"
 #include "photos-share-point-google.h"
 #include "photos-source.h"
+#include "photos-tracker-queue.h"
 #include "photos-utils.h"
 
 
 struct _PhotosSharePointGoogle
 {
   PhotosSharePointOnline parent_instance;
+  PhotosTrackerQueue *queue;
   GDataGoaAuthorizer *authorizer;
   GDataPicasaWebService *service;
+  GError *queue_error;
 };
 
 
@@ -92,6 +99,124 @@ photos_share_point_google_parse_error (PhotosSharePoint *self, GError *error)
 
 
 static void
+photos_share_point_google_relate_objects (PhotosSharePointGoogle *self, GCancellable *cancellable, const gchar *obj1, const gchar *obj2)
+{
+  PhotosSearchContextState *state;
+  PhotosQuery *query;
+  GApplication *app;
+
+  app = g_application_get_default ();
+  state = photos_search_context_get_state (PHOTOS_SEARCH_CONTEXT (app));
+
+  query = photos_query_builder_relate_objects (state, obj1, obj2);
+  printf("Related query 1 :%s \n", query->sparql);
+  photos_tracker_queue_update (self->queue,
+                               query->sparql,
+                               cancellable,
+                               NULL,
+                               NULL,
+                               NULL);
+
+  query = photos_query_builder_relate_objects (state, obj2, obj1);
+  printf("Related query 2 :%s \n", query->sparql);
+  photos_tracker_queue_update (self->queue,
+                               query->sparql,
+                               cancellable,
+                               NULL,
+                               NULL,
+                               NULL);
+  photos_query_free (query);
+}
+
+
+static void
+photos_google_share_point_tracker_entry_created (GObject *source_object, GAsyncResult *res, gpointer user_data)
+{
+  PhotosSharePointGoogle *self;
+  PhotosSharePointGoogleShareData *data;
+  TrackerSparqlConnection *connection = TRACKER_SPARQL_CONNECTION (source_object);
+  GCancellable *cancellable;
+  GError *error;
+  GTask *task = G_TASK (user_data);
+  GVariant *variant;
+  GVariant *child;
+  const gchar *item_urn;
+  const gchar *remote_urn;
+
+  self = PHOTOS_SHARE_POINT_GOOGLE (g_task_get_source_object (task));
+  cancellable = g_task_get_cancellable (task);
+  data = (PhotosSharePointGoogleShareData *) g_task_get_task_data (task);
+
+  error = NULL;
+  variant = tracker_sparql_connection_update_blank_finish (connection, res, &error);
+  if (error != NULL)
+    {
+      g_task_return_error (task, error);
+      return;
+    }
+
+  child = g_variant_get_child_value (variant, 0); /* variant is now aa{ss} */
+  g_variant_unref (variant);
+  variant = child;
+
+  child = g_variant_get_child_value (variant, 0); /* variant is now s{ss} */
+  g_variant_unref (variant);
+  variant = child;
+
+  child = g_variant_get_child_value (variant, 0); /* variant is now {ss} */
+  g_variant_unref (variant);
+  variant = child;
+
+  child = g_variant_get_child_value (variant, 1);
+  remote_urn = g_variant_dup_string (child, NULL);/*urn of inserted object*/
+  g_variant_unref (child);
+  printf("remote image urn: %s\n", remote_urn);
+
+  item_urn = photos_filterable_get_id (PHOTOS_FILTERABLE (data->item));
+  printf("local image urn: %s\n", item_urn);
+
+  /* We do, remote urn relatedTo base urn mapping here.
+   * In the model, we see if any urn has set its related to property then,
+   * it is definitely a remote urn and it does not show up in overview.
+   */
+
+  photos_share_point_google_relate_objects (self, cancellable, remote_urn, item_urn);
+}
+
+
+static void
+photos_share_point_google_create_tracker_entry (PhotosSharePointGoogle *self,
+                                                GTask *task,
+                                                GDataPicasaWebFile *file_entry,
+                                                GError **error)
+{
+  PhotosSearchContextState *state;
+  PhotosQuery *query;
+  GApplication *app;
+  GCancellable *cancellable;
+  const gchar *id;
+  const gchar *title;
+
+  app = g_application_get_default ();
+  state = photos_search_context_get_state (PHOTOS_SEARCH_CONTEXT (app));
+
+  cancellable = g_task_get_cancellable (task);
+
+  id = gdata_entry_get_id (GDATA_ENTRY (file_entry));
+  title = gdata_entry_get_title (GDATA_ENTRY (file_entry));
+
+  query = photos_query_builder_insert_remote_object (state, title, id);
+  photos_tracker_queue_update_blank (self->queue,
+                                     query->sparql,
+                                     cancellable,
+                                     photos_google_share_point_tracker_entry_created,
+                                     g_object_ref (task),
+                                     g_object_unref);
+  photos_query_free (query);
+}
+
+
+static void
 photos_share_point_google_share_save_to_stream (GObject *source_object, GAsyncResult *res, gpointer user_data)
 {
   PhotosSharePointGoogle *self;
@@ -115,6 +240,15 @@ photos_share_point_google_share_save_to_stream (GObject *source_object, GAsyncRe
   file_entry = gdata_picasaweb_service_finish_file_upload (GDATA_PICASAWEB_SERVICE (self->service),
                                                            data->stream,
                                                            &error);
+  if (error != NULL)
+    {
+      g_task_return_error (task, error);
+      goto out;
+    }
+
+    /* adding remote object logic flows from here*/
+  error = NULL;
+  photos_share_point_google_create_tracker_entry (self, task, file_entry, &error);
   if (error != NULL)
     {
       g_task_return_error (task, error);
@@ -259,6 +393,7 @@ photos_share_point_google_dispose (GObject *object)
   PhotosSharePointGoogle *self = PHOTOS_SHARE_POINT_GOOGLE (object);
 
   g_clear_object (&self->authorizer);
+  g_clear_object (&self->queue);
   g_clear_object (&self->service);
 
   G_OBJECT_CLASS (photos_share_point_google_parent_class)->dispose (object);
@@ -266,8 +401,19 @@ photos_share_point_google_dispose (GObject *object)
 
 
 static void
+photos_share_point_google_finalize (GObject *object)
+{
+  PhotosSharePointGoogle *self = PHOTOS_SHARE_POINT_GOOGLE (object);
+
+  g_clear_error (&self->queue_error);
+
+  G_OBJECT_CLASS (photos_share_point_google_parent_class)->dispose (object);
+}
+
+static void
 photos_share_point_google_init (PhotosSharePointGoogle *self)
 {
+  self->queue = photos_tracker_queue_dup_singleton (NULL, &self->queue_error);
 }
 
 
@@ -280,6 +426,7 @@ photos_share_point_google_class_init (PhotosSharePointGoogleClass *class)
   object_class->constructed = photos_share_point_google_constructed;
   object_class->dispose = photos_share_point_google_dispose;
   share_point_class->parse_error = photos_share_point_google_parse_error;
+  object_class->finalize = photos_share_point_google_finalize;
   share_point_class->share_async = photos_share_point_google_share_async;
   share_point_class->share_finish = photos_share_point_google_share_finish;
 }

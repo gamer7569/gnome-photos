@@ -348,6 +348,35 @@ photos_query_builder_update_mtime_query (PhotosSearchContextState *state, const 
 }
 
 
+PhotosQuery *
+photos_query_builder_relate_objects (PhotosSearchContextState *state, const gchar *obj1, const gchar *obj2)
+{
+  gchar *sparql;
+
+  sparql = g_strdup_printf ("INSERT OR REPLACE { <%s> nie:relatedTo '%s' }", obj1, obj2);
+
+  return photos_query_new (state, sparql);
+}
+
+
+PhotosQuery *
+photos_query_builder_insert_remote_object (PhotosSearchContextState *state, const gchar *title, const gchar *id)
+{
+  gchar *identifier;
+  gchar *sparql;
+
+  identifier = g_strconcat ("google:picasaweb:", id, NULL);
+  sparql = g_strdup_printf ("INSERT { _:res a nfo:RemoteDataObject; a nmm:Photo ; "
+                            "nie:title '%s' ; "
+                            "nao:identifier '%s' }",
+                            title,
+                            identifier);
+  g_free (identifier);
+
+  return photos_query_new (state, sparql);
+}
+
+
 gchar *
 photos_query_builder_filter_local (void)
 {

@@ -62,6 +62,10 @@ PhotosQuery  *photos_query_builder_update_mtime_query (PhotosSearchContextState 
 
 gchar        *photos_query_builder_filter_local        (void);
 
+PhotosQuery  *photos_query_builder_insert_remote_object (PhotosSearchContextState *state, const gchar *title, const gchar *id);
+
+PhotosQuery  *photos_query_builder_relate_objects       (PhotosSearchContextState *state, const gchar *obj1, const gchar *obj2);
+
 G_END_DECLS
 
 #endif /* PHOTOS_QUERY_BUILDER */
