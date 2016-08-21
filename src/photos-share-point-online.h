@@ -45,6 +45,17 @@ struct _PhotosSharePointOnlineClass
 
 PhotosSource           *photos_share_point_online_get_source             (PhotosSharePointOnline *self);
 
+void                    photos_share_point_online_tracker_entry_async    (PhotosSharePointOnline *self,
+									  GCancellable *cancellable,
+									  const gchar *title,
+									  const gchar *id,
+									  GAsyncReadyCallback callback,
+									  gpointer user_data);
+
+gboolean               photos_share_point_online_tracker_entry_finish    (PhotosSharePointOnline *self,
+									  GAsyncResult *res,
+									  GError **error);
+
 G_END_DECLS
 
 #endif /* PHOTOS_SHARE_POINT_ONLINE_H */
