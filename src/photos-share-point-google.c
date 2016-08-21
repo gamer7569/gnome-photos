@@ -24,6 +24,7 @@
 #include <gio/gio.h>
 #include <gdata/gdata.h>
 #include <glib/gi18n.h>
+#include <gexiv2/gexiv2.h>
 
 #include "photos-base-item.h"
 #include "photos-filterable.h"
@@ -95,6 +96,55 @@ photos_share_point_google_parse_error (PhotosSharePoint *self, GError *error)
     msg = g_strdup (_("Failed to upload photo"));
 
   return msg;
+}
+
+
+static void
+photos_share_point_google_set_metadata (PhotosBaseItem *item, const gchar *title, const gchar *id, gpointer user_data)
+{
+  GExiv2Metadata *meta;
+  GFile *file;
+  GTask *task;
+  const gchar *uri;
+  gchar *identifier;
+  gchar *path;
+  GError *error = NULL;
+
+  meta = gexiv2_metadata_new ();
+  task = G_TASK (user_data);
+
+  /*Can we do something better to get path ?*/
+  uri = photos_base_item_get_uri (item);
+  file = g_file_new_for_uri (uri);
+  path = g_file_get_path (file);
+  gexiv2_metadata_open_path (meta, path, &error);
+  if (error != NULL)
+    {
+      g_task_return_error (task, error);
+    }
+  else
+    {
+      if (gexiv2_metadata_has_tag (meta, "Xmp.xmp.gnome-photos.google.title"))
+	gexiv2_metadata_clear_tag (meta, "Xmp.xmp.gnome-photos.google.title");
+
+      if (gexiv2_metadata_has_tag (meta, "Xmp.xmp.gnome-photos.google.id"))
+	gexiv2_metadata_clear_tag (meta, "Xmp.xmp.gnome-photos.google.id");
+
+      gexiv2_metadata_set_tag_string (meta, "Xmp.xmp.gnome-photos.google.title", title);
+
+      identifier = g_strconcat ("google:picasaweb:", id, NULL);
+      gexiv2_metadata_set_tag_string (meta, "Xmp.xmp.gnome-photos.google.id", identifier);
+      gexiv2_metadata_save_file (meta, path, &error);
+
+      if (error)
+	g_task_return_error (task, error);
+      }
+
+  gexiv2_metadata_free (meta);
+  g_free (identifier);
+  g_object_unref (file);
+  g_object_unref (task);
+  g_free (path);
 }
 
 
@@ -191,6 +241,7 @@ photos_share_point_google_create_tracker_entry (PhotosSharePointGoogle *self,
                                                 GError **error)
 {
   PhotosSearchContextState *state;
+  PhotosSharePointGoogleShareData *data;
   PhotosQuery *query;
   GApplication *app;
   GCancellable *cancellable;
@@ -201,6 +252,7 @@ photos_share_point_google_create_tracker_entry (PhotosSharePointGoogle *self,
   state = photos_search_context_get_state (PHOTOS_SEARCH_CONTEXT (app));
 
   cancellable = g_task_get_cancellable (task);
+  data = (PhotosSharePointGoogleShareData *) g_task_get_task_data (task);
 
   id = gdata_entry_get_id (GDATA_ENTRY (file_entry));
   title = gdata_entry_get_title (GDATA_ENTRY (file_entry));
@@ -213,6 +265,10 @@ photos_share_point_google_create_tracker_entry (PhotosSharePointGoogle *self,
                                      g_object_ref (task),
                                      g_object_unref);
   photos_query_free (query);
+
+  /*Metadata Embed logic flows from here*/
+  data->item = PHOTOS_BASE_ITEM (g_object_ref (data->item));
+  photos_share_point_google_set_metadata (data->item, title, id, g_object_ref (task));
 }
 
 
