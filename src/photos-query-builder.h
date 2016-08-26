@@ -62,6 +62,19 @@ PhotosQuery  *photos_query_builder_update_mtime_query (PhotosSearchContextState 
 
 gchar        *photos_query_builder_filter_local        (void);
 
+PhotosQuery  *photos_query_builder_insert_or_replace (PhotosSearchContextState *state,
+						      const gchar *resource,
+						      const gchar *property_name,
+						      const gchar *property_value);
+
+PhotosQuery  *photos_query_builder_insert_remote_object (PhotosSearchContextState *state, const gchar *id);
+
+PhotosQuery  *photos_query_builder_relate_objects       (PhotosSearchContextState *state,
+							 const gchar *domain_urn,
+							 const gchar *range_urn);
+
+PhotosQuery *photos_query_builder_get_equipment_query (PhotosSearchContextState *state, const gchar *resource);
+
 G_END_DECLS
 
 #endif /* PHOTOS_QUERY_BUILDER */

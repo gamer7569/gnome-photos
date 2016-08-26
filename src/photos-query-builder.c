@@ -348,6 +348,58 @@ photos_query_builder_update_mtime_query (PhotosSearchContextState *state, const 
 }
 
 
+PhotosQuery *
+photos_query_builder_get_equipment_query (PhotosSearchContextState *state, const gchar *resource)
+{
+  gchar *sparql;
+
+  sparql = g_strdup_printf ("SELECT nfo:equipment(<%s>) WHERE {}", resource);
+
+  return photos_query_new (state, sparql);
+}
+
+
+PhotosQuery *
+photos_query_builder_insert_or_replace (PhotosSearchContextState *state,
+					const gchar *resource,
+					const gchar *property_name,
+					const gchar *property_value)
+{
+  gchar *sparql;
+
+  sparql = g_strdup_printf ("INSERT OR REPLACE { <%s> %s '%s' }", resource, property_name, property_value);
+
+  return photos_query_new (state, sparql);
+}
+
+
+PhotosQuery *
+photos_query_builder_relate_objects (PhotosSearchContextState *state, const gchar *domain_urn, const gchar *range_urn)
+{
+  gchar *sparql;
+
+  sparql = g_strdup_printf ("INSERT OR REPLACE { <%s> nie:relatedTo '%s' }", domain_urn, range_urn);
+
+  return photos_query_new (state, sparql);
+}
+
+
+PhotosQuery *
+photos_query_builder_insert_remote_object (PhotosSearchContextState *state, const gchar *id)
+{
+  gchar *identifier;
+  gchar *sparql;
+
+  identifier = g_strconcat ("google:picasaweb:", id, NULL);
+  sparql = g_strdup_printf ("INSERT { _:res a nfo:RemoteDataObject; a nmm:Photo ; "
+                            "nao:identifier '%s' }",
+                            identifier);
+  g_free (identifier);
+
+  return photos_query_new (state, sparql);
+}
+
+
 gchar *
 photos_query_builder_filter_local (void)
 {
