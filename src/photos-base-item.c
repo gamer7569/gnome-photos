@@ -2148,6 +2148,61 @@ photos_base_item_print_load (GObject *source_object, GAsyncResult *res, gpointer
 
 
 static void
+photos_base_item_add_metadata_in_thread_func (GTask *task,
+                                              gpointer source_object,
+                                              gpointer task_data,
+                                              GCancellable *cancellable)
+{
+  PhotosBaseItem *item = PHOTOS_BASE_ITEM (source_object);
+  GExiv2Metadata *meta;
+  GError *error = NULL;
+  GFile *file;
+  const gchar *tag;
+  const gchar *uri;
+  const gchar *mime_type;
+  gchar *path;
+  gchar *id;
+
+  mime_type = photos_base_item_get_mime_type (item);
+  if ((g_strcmp0 (mime_type, "image/png") == 0) ||
+      (g_strcmp0 (mime_type, "image/jpeg") == 0)||
+      (g_strcmp0 (mime_type, "image/jpg") == 0))
+    {
+      meta = gexiv2_metadata_new ();
+
+      uri = photos_base_item_get_uri (item);
+      file = g_file_new_for_uri (uri);
+      path = g_file_get_path (file);
+
+      gexiv2_metadata_open_path (meta, path, &error);
+      if (error != NULL)
+        goto out;
+      else
+        {
+          tag = (const gchar *) g_object_get_data (G_OBJECT (item), "tag");
+          id = (gchar *) task_data;
+
+          if (gexiv2_metadata_has_tag (meta, tag))
+            gexiv2_metadata_clear_tag (meta, tag);
+
+          gexiv2_metadata_set_tag_string (meta, tag, id);
+          gexiv2_metadata_save_file (meta, path, &error);
+
+          if (error)
+           goto out;
+        }
+    }
+
+  g_task_return_boolean (task, TRUE);
+
+out:
+  gexiv2_metadata_free (meta);
+  g_free (path);
+  g_object_unref (file);
+}
+
+
+static void
 photos_base_item_constructed (GObject *object)
 {
   PhotosBaseItem *self = PHOTOS_BASE_ITEM (object);
@@ -3521,6 +3576,38 @@ photos_base_item_save_to_stream_finish (PhotosBaseItem *self, GAsyncResult *res,
   task = G_TASK (res);
 
   g_return_val_if_fail (g_task_get_source_tag (task) == photos_base_item_save_to_stream_async, FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  return g_task_propagate_boolean (task, error);
+}
+
+
+void
+photos_base_item_add_metadata_async (PhotosBaseItem *self,
+                                     gchar *id,
+                                     GCancellable *cancellable,
+                                     GAsyncReadyCallback callback,
+                                     gpointer user_data)
+{
+  GTask *task;
+
+  task = g_task_new (self, cancellable, callback, user_data);
+  g_task_set_source_tag (task, photos_base_item_add_metadata_async);
+  g_task_set_task_data (task, id, g_free);
+
+  g_task_run_in_thread (task, photos_base_item_add_metadata_in_thread_func);
+  g_object_unref (task);
+}
+
+
+gboolean
+photos_base_item_add_metadata_finish (PhotosBaseItem *self, GAsyncResult *res, GError **error)
+{
+  GTask *task = G_TASK (res);
+
+  g_return_val_if_fail (PHOTOS_IS_BASE_ITEM (self), FALSE);
+  g_return_val_if_fail (g_task_is_valid (res, self), FALSE);
+  g_return_val_if_fail (g_task_get_source_tag (task) == photos_base_item_add_metadata_async, FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   return g_task_propagate_boolean (task, error);

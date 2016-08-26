@@ -100,6 +100,16 @@ struct _PhotosBaseItemClass
 
 GType               photos_base_item_get_type                (void) G_GNUC_CONST;
 
+void                photos_base_item_add_metadata_async      (PhotosBaseItem *self,
+                                                              gchar *id,
+                                                              GCancellable *cancellable,
+                                                              GAsyncReadyCallback callback,
+                                                              gpointer user_data);
+
+gboolean            photos_base_item_add_metadata_finish     (PhotosBaseItem *self,
+                                                              GAsyncResult *res,
+                                                              GError **error);
+
 gboolean            photos_base_item_can_edit                (PhotosBaseItem *self);
 
 gboolean            photos_base_item_can_trash               (PhotosBaseItem *self);
