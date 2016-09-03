@@ -357,6 +357,8 @@ photos_item_manager_info_updated (PhotosBaseItem *item, gpointer user_data)
     {
       if (is_favorite)
         photos_base_manager_add_object (self->item_mngr_chldrn[PHOTOS_WINDOW_MODE_FAVORITES], G_OBJECT (item));
+      else
+        photos_base_manager_remove_object (self->item_mngr_chldrn[PHOTOS_WINDOW_MODE_FAVORITES], G_OBJECT (item));
 
       photos_base_manager_add_object (self->item_mngr_chldrn[PHOTOS_WINDOW_MODE_OVERVIEW], G_OBJECT (item));
     }
