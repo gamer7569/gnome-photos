@@ -1014,7 +1014,10 @@ photos_item_manager_unhide_item (PhotosItemManager *self, PhotosBaseItem *item)
       g_assert_cmpuint (i, <, hidden_item->n_modes);
 
       if (hidden_item->modes[i])
-        photos_base_manager_add_object (self->item_mngr_chldrn[i], G_OBJECT (item));
+        {
+          photos_base_manager_add_object (self->item_mngr_chldrn[i], G_OBJECT (item));
+          g_signal_connect_object (item, "info-updated", G_CALLBACK (photos_item_manager_info_updated), self, 0);
+        }
     }
 
   g_hash_table_remove (self->hidden_items, id);
